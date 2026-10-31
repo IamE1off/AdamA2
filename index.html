@@ -1,4 +1,5 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Adam's Phrase Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,6 +28,7 @@
   --good:#8FC09D; --good-soft:#24372A; --bad:#E09A92; --bad-soft:#47292A;
   --shadow:0 1px 0 rgba(0,0,0,.2),0 14px 30px -14px rgba(0,0,0,.6); color-scheme:dark}
 
+[hidden]{display:none!important}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
 .wrap{max-width:680px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
@@ -182,6 +184,8 @@ textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:1
 .ok-msg{font-size:13px;font-weight:600;color:var(--good);margin:0;min-height:1.2em}
 @media (prefers-reduced-motion: reduce){.card,.bar i{transition:none}.m.no{animation:none}}
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head><body>
 
 <div class="wrap">
   <header>
@@ -212,7 +216,13 @@ textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:1
         <p class="note">The best voices are marked ★. On iPhone: Settings → Accessibility → Spoken Content → Voices → English, then download an Enhanced or Premium voice. Reopen this page and pick it here.</p>
       </div>
       <div class="field">
-        <span class="label">Move progress to another device</span>
+        <span class="label">Google Drive sync</span>
+        <p class="note">Sign in once on each device and your progress follows you. It is stored in a hidden app folder of your own Google Drive.</p>
+        <div class="row"><button class="btn btn-k btn-sm" id="drvConnect" type="button">Connect Google Drive</button><button class="btn btn-plain btn-sm" id="drvSync" type="button" hidden>Sync now</button><button class="btn btn-plain btn-sm" id="drvOff" type="button" hidden>Disconnect</button></div>
+        <p class="note" id="drvStatus" role="status"></p>
+      </div>
+      <div class="field">
+        <span class="label">Move progress to another device (manual)</span>
         <div class="row"><button class="btn btn-k btn-sm" id="copyBtn" type="button">Copy progress code</button></div>
         <textarea id="codeBox" readonly placeholder="Your progress code appears here" aria-label="Progress code"></textarea>
         <label class="label" for="restoreBox">Restore from code</label>
@@ -281,9 +291,9 @@ function norm(o){o=o&&typeof o==='object'?o:{};
   return{p:o.p&&typeof o.p==='object'?o.p:{},b:o.b&&typeof o.b==='object'?o.b:{},
     sel:(o.sel==='all'||Array.isArray(o.sel))?o.sel:'all',
     mode:['today','all','review','new'].includes(o.mode)?o.mode:'today',
-    shuffle:!!o.shuffle,rev:!!o.rev,custom:!!o.custom,voice:typeof o.voice==='string'?o.voice:'auto'}}
+    shuffle:!!o.shuffle,rev:!!o.rev,custom:!!o.custom,voice:typeof o.voice==='string'?o.voice:'auto',upd:+o.upd||0,rst:+o.rst||0}}
 function load(){let o=null;try{o=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}return norm(o)}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){try{S.upd=Date.now();localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof scheduleSync==='function')scheduleSync()}
 let S=load();
 const T={tab:'cards',flipped:false,gap:false,exType:'match',scope:'all',ex:null,resetArm:false};
 
@@ -371,7 +381,7 @@ function mark(kind){const b=curBatch();const en=b.ids[b.pos];if(!en)return;
   const r=S.p[en]||(S.p[en]={s:-1,due:today(),r:false});
   if(kind==='know'){r.s=Math.min((typeof r.s==='number'?r.s:-1)+1,INTERVALS.length-1);r.due=today()+INTERVALS[r.s];r.r=false;b.kn++}
   else{r.r=true;r.due=today();r.s=-1;if(!b.rv.includes(en))b.rv.push(en)}
-  b.pos++;T.flipped=false;T.gap=false;save();renderAll()}
+  r.t=Date.now();b.pos++;T.flipped=false;T.gap=false;save();renderAll()}
 function flip(){const c=$('#card');if(!c)return;T.flipped=!T.flipped;c.classList.toggle('flipped',T.flipped)}
 
 /* ── exercises ── */
@@ -494,7 +504,7 @@ function act(a,t){switch(a){
  case 'exType':T.exType=t.dataset.v;T.ex=null;renderView();break;
  case 'scope':T.scope=t.dataset.v;T.ex=null;renderView();break;
  case 'exAgain':T.ex=null;renderView();break;
- case 'addRev':{const X=T.ex;(X.wrong||[]).forEach(en=>{const r=S.p[en]||(S.p[en]={s:-1,due:today(),r:false});r.r=true;r.due=today();r.s=-1});X.added=true;save();renderAll();break}
+ case 'addRev':{const X=T.ex;(X.wrong||[]).forEach(en=>{const r=S.p[en]||(S.p[en]={s:-1,due:today(),r:false});r.r=true;r.due=today();r.s=-1;r.t=Date.now()});X.added=true;save();renderAll();break}
  case 'mpick':mpick(t);break;
  case 'gapHint':{const c=T.ex.items[T.ex.i],i=$('#gapIn');if(i){i.value=c.ans[0];i.focus()}break}
  case 'gapCheck':{const X=T.ex,c=X.items[X.i],i=$('#gapIn');if(!i||!i.value.trim())break;X.val=i.value;X.ok=nz(i.value)===nz(c.ans);X.checked=true;if(X.ok)X.score++;else X.wrong.push(c.en);renderView();break}
@@ -533,7 +543,7 @@ document.addEventListener('keydown',e=>{
 
 /* ── settings ── */
 function setMsg(t,bad){const m=$('#setMsg');m.textContent=t;m.style.color=bad?'var(--bad)':'var(--good)'}
-function makeCode(){const json=JSON.stringify({v:1,p:S.p,b:S.b,sel:S.sel,mode:S.mode,shuffle:S.shuffle,rev:S.rev,custom:S.custom,voice:S.voice});
+function makeCode(){const json=JSON.stringify({v:1,p:S.p,b:S.b,sel:S.sel,mode:S.mode,shuffle:S.shuffle,rev:S.rev,custom:S.custom,voice:S.voice,upd:S.upd,rst:S.rst});
   let bin='';new TextEncoder().encode(json).forEach(b=>bin+=String.fromCharCode(b));return btoa(bin)}
 function readCode(c){const bytes=Uint8Array.from(atob(c.replace(/\s+/g,'')),ch=>ch.charCodeAt(0));const o=JSON.parse(new TextDecoder().decode(bytes));
   if(!o||typeof o!=='object'||!o.p||typeof o.p!=='object')throw new Error('bad code');return o}
@@ -545,11 +555,107 @@ $('#listenBtn').addEventListener('click',()=>speak("Let's practise some English 
 $('#resetBtn').addEventListener('click',()=>{const b=$('#resetBtn');
   if(!T.resetArm){T.resetArm=true;b.textContent='Click again to erase all progress';b.className='btn btn-danger btn-sm';
     setTimeout(()=>{T.resetArm=false;b.textContent='Reset all progress';b.className='btn btn-plain btn-sm'},4000);return}
-  T.resetArm=false;S.p={};S.b={};S.custom=false;save();T.ex=null;T.flipped=false;T.gap=false;b.textContent='Reset all progress';b.className='btn btn-plain btn-sm';renderAll();setMsg('All progress was erased.')});
+  T.resetArm=false;S.p={};S.b={};S.custom=false;S.rst=Date.now();save();T.ex=null;T.flipped=false;T.gap=false;b.textContent='Reset all progress';b.className='btn btn-plain btn-sm';renderAll();setMsg('All progress was erased.')});
 
 if('speechSynthesis' in window){try{speechSynthesis.onvoiceschanged=loadVoices}catch(e){}}
 loadVoices();setTimeout(loadVoices,600);
 renderAll();
 </script>
+<script>
+/* ═══════════ GOOGLE DRIVE SYNC ═══════════
+   1) Paste your OAuth Client ID below (see setup steps).
+   2) Progress is stored as progress.json in the hidden app folder of the student's own Drive. */
+const CLIENT_ID='PASTE_YOUR_CLIENT_ID_HERE.apps.googleusercontent.com';
+const SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME='progress.json';
+const FLAG='adam-drive-on';
+const D={token:null,exp:0,tc:null,fileId:null,busy:false,again:false,timer:null,last:null,err:'',queue:[],wait:false,dirty:false,reqAt:0};
+const dOn=()=>{try{return localStorage.getItem(FLAG)==='1'}catch(e){return false}};
+const dSet=v=>{try{v?localStorage.setItem(FLAG,'1'):localStorage.removeItem(FLAG)}catch(e){}};
+const configured=()=>!/PASTE_YOUR/.test(CLIENT_ID);
+const tokenOk=()=>!!D.token&&Date.now()<D.exp-60000;
 
+function drvUI(){const st=$('#drvStatus');if(!st)return;const on=dOn();let t;
+  if(!configured())t='Not set up yet. Add the Google Client ID in index.html.';
+  else if(D.err)t=D.err;
+  else if(!on)t='Not connected. Progress is saved only in this browser.';
+  else if(D.busy)t='Syncing…';
+  else if(D.wait)t='Connected. Tap anywhere on the page to reconnect to Google Drive.';
+  else if(D.last)t='Connected · synced at '+D.last.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  else t='Connected.';
+  st.textContent=t;
+  $('#drvConnect').hidden=on||!configured();$('#drvSync').hidden=!on;$('#drvOff').hidden=!on}
+
+function initGis(){if(D.tc||!configured())return;
+  if(!(window.google&&google.accounts&&google.accounts.oauth2))return;
+  D.tc=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPE,
+    callback:r=>{if(r&&r.access_token){D.token=r.access_token;D.exp=Date.now()+(r.expires_in||3600)*1000;D.err='';D.wait=false;dSet(true);const q=D.queue.splice(0);q.forEach(f=>f())}
+      else{D.queue=[];D.err='Google sign-in was not completed.'}drvUI()},
+    error_callback:e=>{D.queue=[];D.err=(e&&e.type==='popup_closed')?'The sign-in window was closed. Tap Connect to try again.':'Could not open Google sign-in. Open this page in Safari or Chrome, not inside another app.';drvUI()}})}
+
+function withToken(cb){if(tokenOk()){cb();return}
+  if(!D.tc){D.err='Google sign-in is still loading. Try again in a moment.';drvUI();return}
+  D.queue.push(cb);try{D.tc.requestAccessToken({prompt:''})}catch(e){D.queue=[];D.err='Could not open Google sign-in.';drvUI()}}
+
+async function gfetch(url,opt){opt=opt||{};
+  const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:'Bearer '+D.token}});
+  if(r.status===401){D.token=null;D.exp=0;throw new Error('auth')}
+  if(!r.ok)throw new Error('http '+r.status);return r}
+async function findFile(){const q=encodeURIComponent("name='"+FILE_NAME+"' and 'appDataFolder' in parents and trashed=false");
+  const r=await gfetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&orderBy=createdTime&pageSize=1&fields=files(id)&q='+q);
+  const j=await r.json();return j.files&&j.files[0]?j.files[0].id:null}
+async function readFile(id){const r=await gfetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media');return await r.json()}
+async function writeFile(id,obj){const body=JSON.stringify(obj);
+  if(id){await gfetch('https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body});return id}
+  const bd='adamcards'+Date.now();const meta=JSON.stringify({name:FILE_NAME,parents:['appDataFolder'],mimeType:'application/json'});
+  const mp='--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bd+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+bd+'--';
+  const r=await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body:mp});
+  return (await r.json()).id}
+
+const snapshot=()=>({v:1,p:S.p,b:S.b,sel:S.sel,mode:S.mode,shuffle:S.shuffle,rev:S.rev,custom:S.custom,upd:S.upd||0,rst:S.rst||0});
+/* Per-phrase merge: the record with the newer timestamp wins. Position, mode and lesson choice come from the newer snapshot. */
+function mergeState(L,R){const rst=Math.max(L.rst||0,R.rst||0);const p={};
+  new Set([...Object.keys(L.p||{}),...Object.keys(R.p||{})]).forEach(k=>{
+    const a=L.p&&L.p[k],b=R.p&&R.p[k];const w=!b?a:(!a?b:((a.t||0)>=(b.t||0)?a:b));
+    if(w&&(w.t||0)>=rst)p[k]=w});
+  const nw=(L.upd||0)>=(R.upd||0)?L:R;
+  return{v:1,p,b:nw.b||{},sel:nw.sel,mode:nw.mode,shuffle:nw.shuffle,rev:nw.rev,custom:nw.custom,upd:Math.max(L.upd||0,R.upd||0),rst}}
+function applyMerged(M){const voice=S.voice;S=norm({...M,voice});
+  try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+  T.ex=null;T.flipped=false;T.gap=false;renderAll()}
+
+async function syncNow(interactive){
+  if(!dOn()||!configured())return;
+  if(!tokenOk()){if(interactive)withToken(()=>syncNow(false));else{D.wait=true;drvUI()}return}
+  if(D.busy){D.again=true;return}
+  D.busy=true;D.err='';drvUI();
+  try{
+    if(!D.fileId)D.fileId=await findFile();
+    const L=snapshot();let M=L,remote=null;
+    if(D.fileId){remote=await readFile(D.fileId);if(remote&&remote.p&&typeof remote.p==='object')M=mergeState(L,remote);else remote=null}
+    if(JSON.stringify(M)!==JSON.stringify(L))applyMerged(M);
+    if(!remote||JSON.stringify(M)!==JSON.stringify(remote))D.fileId=await writeFile(D.fileId,M);
+    D.last=new Date();D.dirty=false;D.wait=false;
+  }catch(e){
+    if(e.message==='auth'){D.wait=true}
+    else{if(/404/.test(e.message))D.fileId=null;D.err='Sync failed. Check your internet connection and tap Sync now.'}
+  }
+  D.busy=false;drvUI();
+  if(D.again){D.again=false;scheduleSync(500)}}
+function scheduleSync(ms){if(!dOn()||!configured())return;D.dirty=true;clearTimeout(D.timer);D.timer=setTimeout(()=>syncNow(false),ms==null?3000:ms)}
+
+$('#drvConnect').addEventListener('click',()=>{D.err='';drvUI();withToken(()=>syncNow(false))});
+$('#drvSync').addEventListener('click',()=>{D.err='';syncNow(true)});
+$('#drvOff').addEventListener('click',()=>{try{if(D.token&&window.google)google.accounts.oauth2.revoke(D.token,()=>{})}catch(e){}
+  D.token=null;D.exp=0;D.fileId=null;D.last=null;D.err='';D.wait=false;dSet(false);drvUI()});
+/* A returning student: the first tap on the page reconnects (a popup needs a real tap). */
+document.addEventListener('click',()=>{const now=Date.now();
+  if(dOn()&&configured()&&!tokenOk()&&!D.busy&&now-D.reqAt>60000){D.reqAt=now;syncNow(true)}},true);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&D.dirty&&tokenOk())syncNow(false);
+  else if(document.visibilityState==='visible'&&dOn()&&tokenOk())scheduleSync(200)});
+D.wait=dOn();drvUI();
+{let tries=0;const iv=setInterval(()=>{initGis();if(D.tc||++tries>40)clearInterval(iv)},300)}
+if(dOn())scheduleSync(800);
+</script>
 </body></html>
